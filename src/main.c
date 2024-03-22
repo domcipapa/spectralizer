@@ -250,7 +250,7 @@ static void fft_render(Rectangle boundary, size_t m) {
 }
 
 int main(int argc, char **argv) {
-    SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_WINDOW_ALWAYS_RUN);
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_WINDOW_ALWAYS_RUN | FLAG_MSAA_4X_HINT);
     InitWindow(window_width, window_height, window_title);
     SetTargetFPS(target_fps);
 
