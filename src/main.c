@@ -1,10 +1,12 @@
 #include <string.h>
 #include <assert.h>
-#include "raylib.h"
+#include <raylib.h>
 #include <math.h>
 #include <complex.h>
+#include <rlgl.h>
 
 #define FFT_SIZE (1<<13)
+#define GLSL_VERSION 330
 
 #define Float_Complex float complex
 #define cfromreal(re) (re)
@@ -20,9 +22,9 @@ char *window_title = "Audio Spectrum Visualizer in C";
 int target_fps = 144;
 
 // fft related
+Float_Complex out_raw[FFT_SIZE];
 float in_raw[FFT_SIZE];
 float in_win[FFT_SIZE];
-Float_Complex out_raw[FFT_SIZE];
 float out_log[FFT_SIZE];
 float out_smooth[FFT_SIZE];
 float out_smear[FFT_SIZE];
@@ -104,12 +106,18 @@ static size_t fft_analyze(float dt) {
     return m;
 }
 
+Shader circle;
+int circle_radius_location;
+int circle_power_location;
 static void fft_render(Rectangle boundary, size_t m) {
+    // Width of a single bar
     float cell_width = boundary.width / m;
 
+    // Color related
     float saturation = 0.75f;
     float value = 1.0f;
 
+    // Draw LINES
     for (size_t i = 0; i < m; ++i) {
         float t = out_smooth[i];
         float hue = (float) i / m;
@@ -127,6 +135,83 @@ static void fft_render(Rectangle boundary, size_t m) {
         float thick = cell_width / 3 * sqrtf(t);
         DrawLineEx(startPos, endPos, thick, color);
     }
+
+    // Load texture
+    Texture2D texture = { rlGetTextureIdDefault(), 1, 1, 1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
+
+    // Draw SMEARS
+    SetShaderValue(circle, circle_radius_location, (float[1]) { 0.3f }, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(circle, circle_power_location, (float[1]) { 0.3f }, SHADER_UNIFORM_FLOAT);
+    BeginShaderMode(circle);
+
+    for (size_t i = 0; i < m; ++i) {
+        float start = out_smear[i];
+        float end = out_smooth[i];
+        float hue = (float) i / m;
+        Color color = ColorFromHSV(hue * 360, saturation, value);
+
+        Vector2 startPos = {
+                boundary.x + i * cell_width + cell_width / 2,
+                boundary.y + boundary.height - boundary.height * 2 / 3 * start,
+        };
+
+        Vector2 endPos = {
+                boundary.x + i * cell_width + cell_width / 2,
+                boundary.y + boundary.height - boundary.height * 2 / 3 * end,
+        };
+
+        float radius = cell_width * 3 * sqrtf(end);
+        Vector2 origin = { 0 };
+
+        if (endPos.y >= startPos.y) {
+            Rectangle dest = {
+                    .x = startPos.x - radius / 2,
+                    .y = startPos.y,
+                    .width = radius,
+                    .height = endPos.y - startPos.y,
+            };
+
+            Rectangle source = { 0, 0, 1, 0.5 };
+            DrawTexturePro(texture, source, dest, origin, 0, color);
+        } else {
+            Rectangle dest = {
+                    .x = endPos.x - radius / 2,
+                    .y = endPos.y,
+                    .width = radius,
+                    .height = startPos.y - endPos.y,
+            };
+
+            Rectangle source = { 0, 0.5, 1, 0.5 };
+            DrawTexturePro(texture, source, dest, origin, 0, color);
+        }
+    }
+    EndShaderMode();
+
+    // Draw CIRCLES
+    SetShaderValue(circle, circle_radius_location, (float[1]) { 0.07f }, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(circle, circle_power_location, (float[1]) { 5.0f }, SHADER_UNIFORM_FLOAT);
+    BeginShaderMode(circle);
+
+    for (size_t i = 0; i < m; ++i) {
+        float t = out_smooth[i];
+        float hue = (float) i / m;
+        Color color = ColorFromHSV(hue * 360, saturation, value);
+
+        Vector2 center = {
+                boundary.x + i * cell_width + cell_width / 2,
+                boundary.y + boundary.height - boundary.height * 2 / 3 * t,
+        };
+
+        float radius = cell_width * 6 * sqrtf(t);
+        Vector2 position = {
+                .x = center.x - radius,
+                .y = center.y - radius,
+        };
+
+        DrawTextureEx(texture, position, 0, 2 * radius, color);
+    }
+
+    EndShaderMode();
 }
 
 int main(int argc, char **argv) {
@@ -135,9 +220,13 @@ int main(int argc, char **argv) {
     SetTargetFPS(target_fps);
 
     InitAudioDevice();
-    Music music = LoadMusicStream("../acdc.mp3");
+    Music music = LoadMusicStream("../legion.mp3");
     AttachAudioStreamProcessor(music.stream, callback);
     PlayMusicStream(music);
+
+    circle = LoadShader(0, TextFormat("../resources/shaders/glsl%d/circle.fs", GLSL_VERSION));
+    circle_radius_location = GetShaderLocation(circle, "radius");
+    circle_power_location = GetShaderLocation(circle, "power");
 
     while (!WindowShouldClose()) {
         BeginDrawing(); {
