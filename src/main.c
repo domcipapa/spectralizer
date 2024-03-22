@@ -4,6 +4,7 @@
 #include <math.h>
 #include <complex.h>
 #include <rlgl.h>
+#include <raymath.h>
 
 #define FFT_SIZE (1<<13)
 #define GLSL_VERSION 330
@@ -109,6 +110,10 @@ static size_t fft_analyze(float dt) {
 Shader circle;
 int circle_radius_location;
 int circle_power_location;
+
+Vector2 center = { };
+int radius = 0;
+int radius2 = 0;
 static void fft_render(Rectangle boundary, size_t m) {
     // Width of a single bar
     float cell_width = boundary.width / m;
@@ -117,39 +122,56 @@ static void fft_render(Rectangle boundary, size_t m) {
     float saturation = 0.75f;
     float value = 1.0f;
 
+    //
     // Draw LINES
+    //
     for (size_t i = 0; i < m; ++i) {
-        float t = out_smooth[i];
+        // more color things
         float hue = (float) i / m;
         Color color = ColorFromHSV(hue * 360, saturation, value);
 
-        Vector2 startPos = {
-                boundary.x + i * cell_width + cell_width / 2,
-                boundary.y + boundary.height - boundary.height * 2 / 3 * t,
-        };
-        Vector2 endPos = {
-                boundary.x + i * cell_width + cell_width / 2,
-                boundary.y + boundary.height,
-        };
+        // trigonometry
+        float angle = (float) i * 2 * PI / m;
 
+        float start_x = center.x + radius * cos(angle);
+        float start_y = center.y + radius * sin(angle);
+
+        float end_x = center.x + radius2 * cos(angle);
+        float end_y = center.y + radius2 * sin(angle);
+
+        // define positions
+        float t = out_smooth[i];
+        Vector2 startPos = {
+                Lerp(start_x, end_x, t),
+                Lerp(start_y, end_y, t),
+        };
+        Vector2 endPos = { start_x, start_y };
         float thick = cell_width / 3 * sqrtf(t);
+
+        // display line
         DrawLineEx(startPos, endPos, thick, color);
     }
 
+    //
     // Load texture
+    //
     Texture2D texture = { rlGetTextureIdDefault(), 1, 1, 1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
 
+    //
     // Draw SMEARS
+    /*/
     SetShaderValue(circle, circle_radius_location, (float[1]) { 0.3f }, SHADER_UNIFORM_FLOAT);
     SetShaderValue(circle, circle_power_location, (float[1]) { 0.3f }, SHADER_UNIFORM_FLOAT);
     BeginShaderMode(circle);
 
     for (size_t i = 0; i < m; ++i) {
-        float start = out_smear[i];
-        float end = out_smooth[i];
+        // more color things
         float hue = (float) i / m;
         Color color = ColorFromHSV(hue * 360, saturation, value);
 
+        // define positions
+        float start = out_smear[i];
+        float end = out_smooth[i];
         Vector2 startPos = {
                 boundary.x + i * cell_width + cell_width / 2,
                 boundary.y + boundary.height - boundary.height * 2 / 3 * start,
@@ -160,9 +182,9 @@ static void fft_render(Rectangle boundary, size_t m) {
                 boundary.y + boundary.height - boundary.height * 2 / 3 * end,
         };
 
+        // display shaders
         float radius = cell_width * 3 * sqrtf(end);
         Vector2 origin = { 0 };
-
         if (endPos.y >= startPos.y) {
             Rectangle dest = {
                     .x = startPos.x - radius / 2,
@@ -187,27 +209,40 @@ static void fft_render(Rectangle boundary, size_t m) {
     }
     EndShaderMode();
 
+    /*/
     // Draw CIRCLES
+    //
     SetShaderValue(circle, circle_radius_location, (float[1]) { 0.07f }, SHADER_UNIFORM_FLOAT);
     SetShaderValue(circle, circle_power_location, (float[1]) { 5.0f }, SHADER_UNIFORM_FLOAT);
     BeginShaderMode(circle);
 
     for (size_t i = 0; i < m; ++i) {
-        float t = out_smooth[i];
+        // more color things
         float hue = (float) i / m;
         Color color = ColorFromHSV(hue * 360, saturation, value);
 
-        Vector2 center = {
-                boundary.x + i * cell_width + cell_width / 2,
-                boundary.y + boundary.height - boundary.height * 2 / 3 * t,
-        };
+        // trigonometry
+        float angle = (float) i * 2 * PI / m;
 
-        float radius = cell_width * 6 * sqrtf(t);
+        float start_x = center.x + radius * cos(angle);
+        float start_y = center.y + radius * sin(angle);
+
+        float end_x = center.x + radius2 * cos(angle);
+        float end_y = center.y + radius2 * sin(angle);
+
+        // define positions
+        float t = out_smooth[i];
+        Vector2 center = {
+                Lerp(start_x, end_x, t),
+                Lerp(start_y, end_y, t),
+        };
+        float radius = cell_width * 3 * sqrtf(t);
         Vector2 position = {
                 .x = center.x - radius,
                 .y = center.y - radius,
         };
 
+        // display shaders
         DrawTextureEx(texture, position, 0, 2 * radius, color);
     }
 
@@ -220,7 +255,7 @@ int main(int argc, char **argv) {
     SetTargetFPS(target_fps);
 
     InitAudioDevice();
-    Music music = LoadMusicStream("../legion.mp3");
+    Music music = LoadMusicStream("../music.mp3");
     AttachAudioStreamProcessor(music.stream, callback);
     PlayMusicStream(music);
 
@@ -228,11 +263,18 @@ int main(int argc, char **argv) {
     circle_radius_location = GetShaderLocation(circle, "radius");
     circle_power_location = GetShaderLocation(circle, "power");
 
+    char *text = ">:)";
+    int font_size = 70;
+    int mt = MeasureText(text, font_size);
     while (!WindowShouldClose()) {
         BeginDrawing(); {
             ClearBackground(BLACK);
             int w = GetScreenWidth();
             int h = GetScreenHeight();
+
+            center = (Vector2) { w / 2, h / 2};
+            radius2 = h - center.y;
+            radius = radius2 * 1 / 3;
 
             UpdateMusicStream(music);
             size_t m = fft_analyze(GetFrameTime());
@@ -244,6 +286,7 @@ int main(int argc, char **argv) {
                     .height = h,
             };
 
+            DrawText(text, center.x - (mt / 2), center.y - (font_size / 2), font_size, RAYWHITE);
             DrawFPS(10, 10);
             fft_render(preview_boundary, m);
         } EndDrawing();
