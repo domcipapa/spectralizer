@@ -244,6 +244,7 @@ int main(int argc, char **argv) {
                     .height = h,
             };
 
+            DrawFPS(10, 10);
             fft_render(preview_boundary, m);
         } EndDrawing();
     }
