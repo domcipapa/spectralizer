@@ -1,8 +1,15 @@
-cmake_minimum_required(VERSION 3.28)
+cmake_minimum_required(VERSION 3.27)
 project(spectralizer)
 
 set(CMAKE_C_STANDARD 23)
 set(BUILD_SHARED_LIBS OFF)
 
 add_executable(spectralizer src/main.c)
-target_link_libraries(spectralizer PRIVATE raylib m)
+if (WIN32)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -static-libgcc -static-libstdc++")
+    include_directories("include")
+    find_library(RAYLIB raylib "lib")
+    target_link_libraries(spectralizer PRIVATE ${RAYLIB} winmm -static)
+else ()
+    target_link_libraries(spectralizer PRIVATE raylib m)
+endif ()

@@ -255,7 +255,7 @@ int main(int argc, char **argv) {
     SetTargetFPS(target_fps);
 
     InitAudioDevice();
-    Music music = LoadMusicStream("../music.mp3");
+    Music music = LoadMusicStream("../audio/music.mp3");
     AttachAudioStreamProcessor(music.stream, callback);
     PlayMusicStream(music);
 
