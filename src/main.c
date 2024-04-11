@@ -158,58 +158,6 @@ static void fft_render(Rectangle boundary, size_t m) {
     Texture2D texture = { rlGetTextureIdDefault(), 1, 1, 1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
 
     //
-    // Draw SMEARS
-    /*/
-    SetShaderValue(circle, circle_radius_location, (float[1]) { 0.3f }, SHADER_UNIFORM_FLOAT);
-    SetShaderValue(circle, circle_power_location, (float[1]) { 0.3f }, SHADER_UNIFORM_FLOAT);
-    BeginShaderMode(circle);
-
-    for (size_t i = 0; i < m; ++i) {
-        // more color things
-        float hue = (float) i / m;
-        Color color = ColorFromHSV(hue * 360, saturation, value);
-
-        // define positions
-        float start = out_smear[i];
-        float end = out_smooth[i];
-        Vector2 startPos = {
-                boundary.x + i * cell_width + cell_width / 2,
-                boundary.y + boundary.height - boundary.height * 2 / 3 * start,
-        };
-
-        Vector2 endPos = {
-                boundary.x + i * cell_width + cell_width / 2,
-                boundary.y + boundary.height - boundary.height * 2 / 3 * end,
-        };
-
-        // display shaders
-        float radius = cell_width * 3 * sqrtf(end);
-        Vector2 origin = { 0 };
-        if (endPos.y >= startPos.y) {
-            Rectangle dest = {
-                    .x = startPos.x - radius / 2,
-                    .y = startPos.y,
-                    .width = radius,
-                    .height = endPos.y - startPos.y,
-            };
-
-            Rectangle source = { 0, 0, 1, 0.5 };
-            DrawTexturePro(texture, source, dest, origin, 0, color);
-        } else {
-            Rectangle dest = {
-                    .x = endPos.x - radius / 2,
-                    .y = endPos.y,
-                    .width = radius,
-                    .height = startPos.y - endPos.y,
-            };
-
-            Rectangle source = { 0, 0.5, 1, 0.5 };
-            DrawTexturePro(texture, source, dest, origin, 0, color);
-        }
-    }
-    EndShaderMode();
-
-    /*/
     // Draw CIRCLES
     //
     SetShaderValue(circle, circle_radius_location, (float[1]) { 0.07f }, SHADER_UNIFORM_FLOAT);
@@ -245,6 +193,67 @@ static void fft_render(Rectangle boundary, size_t m) {
         // display shaders
         DrawTextureEx(texture, position, 0, 2 * radius, color);
     }
+    EndShaderMode();
+
+    //
+    // Draw SMEARS
+    //
+    SetShaderValue(circle, circle_radius_location, (float[1]) { 0.3f }, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(circle, circle_power_location, (float[1]) { 0.3f }, SHADER_UNIFORM_FLOAT);
+    BeginShaderMode(circle);
+
+    for (size_t i = 0; i < m; ++i) {
+        // more color things
+        float hue = (float) i / m;
+        Color color = ColorFromHSV(hue * 360, saturation, value);
+
+        // trigonometry
+        float angle = (float) i * 2 * PI / m;
+
+        float start_x = center.x + radius * cos(angle);
+        float start_y = center.y + radius * sin(angle);
+
+        float end_x = center.x + radius2 * cos(angle);
+        float end_y = center.y + radius2 * sin(angle);
+
+        // define positions
+        float start = out_smear[i];
+        float end = out_smooth[i];
+        Vector2 startPos = {
+                Lerp(start_x, end_x, start),
+                Lerp(start_y, end_y, start),
+        };
+
+        Vector2 endPos = {
+                Lerp(start_x, end_x, end),
+                Lerp(start_y, end_y, end),
+        };
+
+        // display shaders
+        float radius = cell_width * 3 * sqrtf(end);
+        Vector2 origin = { 0 };
+        if (endPos.y >= startPos.y) {
+            Rectangle dest = {
+                    .x = startPos.x - radius / 2,
+                    .y = startPos.y,
+                    .width = radius,
+                    .height = endPos.y - startPos.y,
+            };
+
+            Rectangle source = { 0, 0, 1, 0.5 };
+            DrawTexturePro(texture, source, dest, origin, 0, color);
+        } else {
+            Rectangle dest = {
+                    .x = endPos.x - radius / 2,
+                    .y = endPos.y,
+                    .width = radius,
+                    .height = startPos.y - endPos.y,
+            };
+
+            Rectangle source = { 0, 0.5, 1, 0.5 };
+            DrawTexturePro(texture, source, dest, origin, 0, color);
+        }
+    }
 
     EndShaderMode();
 }
@@ -274,7 +283,7 @@ int main(int argc, char **argv) {
 
             center = (Vector2) { w / 2, h / 2};
             radius2 = h - center.y;
-            radius = radius2 * 1 / 3;
+            radius = radius2 / 4;
 
             UpdateMusicStream(music);
             size_t m = fft_analyze(GetFrameTime());
@@ -288,6 +297,8 @@ int main(int argc, char **argv) {
 
             DrawText(text, center.x - (mt / 2), center.y - (font_size / 2), font_size, RAYWHITE);
             DrawFPS(10, 10);
+
+            m -= 7;
             fft_render(preview_boundary, m);
         } EndDrawing();
     }
